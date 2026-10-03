@@ -1,0 +1,6 @@
+torch>=2.0
+numpy
+pandas
+matplotlib
+beautifulsoup4
+demoji==1.1.0
