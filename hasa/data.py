@@ -26,6 +26,10 @@ warnings.filterwarnings("ignore")
 
 # ---------------------------------------------------------------- text cleaning
 def remove_html_tags(text):
+    # Python < 3.13's HTML parser drops the "&" of an unterminated reference at the very end
+    # ("... M&A" -> "... MA"); newer versions keep it. Do it explicitly so that every Python
+    # version gives the paper's tokens.
+    text = re.sub(r"&(?=[A-Za-z]+$)", "", text)
     return BeautifulSoup(text, "html.parser").get_text()
 
 
