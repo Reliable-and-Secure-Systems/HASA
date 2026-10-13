@@ -4,9 +4,12 @@ A width ratio r activates the first floor(r * 256) hidden units: the LSTM gate r
 the recurrent columns and the output-layer columns are sliced, so a client with a
 narrower subnet really computes less.
 """
+import functools
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.func import functional_call
 
 
 class HeterogeneousSubnetLSTM(nn.Module):
@@ -35,29 +38,26 @@ class HeterogeneousSubnetLSTM(nn.Module):
 
 
 def forward_subnet_with_indices(model, x, active_idx_list, hidden_dim):
-    """LSTM forward pass using only the hidden units in `active_idx_list`
-    (a prefix for HASA / HeteroFL, a random or rolling set for the other baselines)."""
-    device = x.device
-    active_idx = torch.tensor(active_idx_list, device=device, dtype=torch.long)
-    a = len(active_idx)
-    batch_size = x.size(0)
-    embedded = model.embedding(x)
+    """LSTM forward pass that uses only the hidden units in `active_idx_list`
+    (a prefix for HASA / HeteroFL, a random or rolling set for the other baselines).
 
-    gate_indices = torch.cat([active_idx, active_idx + hidden_dim,
-                              active_idx + 2 * hidden_dim, active_idx + 3 * hidden_dim])
-    weight_ih = model.lstm.weight_ih_l0[gate_indices, :]
-    weight_hh = model.lstm.weight_hh_l0[gate_indices][:, active_idx]
-    bias_ih = model.lstm.bias_ih_l0[gate_indices]
-    bias_hh = model.lstm.bias_hh_l0[gate_indices]
+    The gate rows, the recurrent block and the output columns of those units are cut out
+    of the shared weights, and PyTorch's LSTM kernel runs on the slices: the subnet computes
+    less, and its gradients flow back into the shared weights."""
+    idx = torch.as_tensor(active_idx_list, device=x.device, dtype=torch.long)
+    gates = torch.cat([idx + k * hidden_dim for k in range(4)])   # input, forget, cell, output gates
+    lstm = model.lstm
+    weights = {"weight_ih_l0": lstm.weight_ih_l0[gates],
+               "weight_hh_l0": lstm.weight_hh_l0[gates][:, idx],
+               "bias_ih_l0": lstm.bias_ih_l0[gates],
+               "bias_hh_l0": lstm.bias_hh_l0[gates]}
+    h0 = torch.zeros(1, x.size(0), len(idx), device=x.device)
+    out, _ = functional_call(_lstm_shell(lstm.input_size, len(idx)), weights, (model.embedding(x), (h0, h0)))
+    return F.linear(out[:, -1], model.fc.weight[:, idx], model.fc.bias)
 
-    h_t = torch.zeros(batch_size, a, device=device)
-    c_t = torch.zeros(batch_size, a, device=device)
-    for t in range(embedded.size(1)):
-        gates = embedded[:, t, :] @ weight_ih.T + bias_ih + h_t @ weight_hh.T + bias_hh
-        i_t = torch.sigmoid(gates[:, :a])
-        f_t = torch.sigmoid(gates[:, a:2 * a])
-        g_t = torch.tanh(gates[:, 2 * a:3 * a])
-        o_t = torch.sigmoid(gates[:, 3 * a:])
-        c_t = f_t * c_t + i_t * g_t
-        h_t = o_t * torch.tanh(c_t)
-    return F.linear(h_t, model.fc.weight[:, active_idx], model.fc.bias)
+
+@functools.lru_cache(maxsize=None)
+def _lstm_shell(input_size, hidden_size):
+    """An LSTM module with no weights of its own (built on the meta device, so creating it
+    uses no random numbers); functional_call supplies the sliced weights."""
+    return nn.LSTM(input_size, hidden_size, batch_first=True, device="meta")
