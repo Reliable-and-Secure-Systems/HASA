@@ -26,3 +26,10 @@ def get_device(name=None):
     if torch.cuda.is_available():
         return torch.device("cuda")
     return torch.device("cpu")
+
+
+def device_name(device):
+    """Readable name of a torch device, e.g. "NVIDIA Tesla T4" or "Apple GPU"."""
+    if device.type == "cuda":
+        return torch.cuda.get_device_name(device)
+    return {"mps": "Apple GPU", "cpu": "CPU"}.get(device.type, str(device))

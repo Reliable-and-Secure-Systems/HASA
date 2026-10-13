@@ -10,18 +10,16 @@ In model-heterogeneous federated learning, every client trains a subnet of one s
 
 ## Demo
 
-Open the notebook with the Colab badge above, choose a GPU runtime (*Runtime → Change runtime type → T4 GPU*) and run all cells. The first cell clones this repository and builds the benchmark. Each cell shows one claim of the paper:
+Open the notebook with the Colab badge above, choose a GPU runtime (*Runtime → Change runtime type → T4 GPU*) and run all cells. It clones this repository and runs the article-title experiment of the paper from start to finish:
 
-| Cell | What it shows | Paper |
-|---|---|---|
-| 1 | The benchmark: seven Medium publications as clients | Sec. V-A |
-| 2 | Train-only heterogeneity score (JSD) | Sec. IV-A, Table III |
-| 3 | HASA allocation under a fixed budget B = 0.5 | Sec. IV-B, Algorithm 1 |
-| 4 | Slimmable LSTM: width r runs the first ⌊256·r⌋ hidden units | Sec. III-A, V-A |
-| 5 | Federated training, HASA vs Uniform at the same budget | Sec. VI-A |
-| 6 | This run next to the published 10-seed results | Fig. 3, Table III |
+1. the federation: seven Medium publications, one client each;
+2. how different each client's data is (train-only Jensen-Shannon divergence);
+3. the HASA widths under a fixed compute budget (Algorithm 1);
+4. what a width means inside the slimmable LSTM;
+5. federated training with HASA widths and with uniform widths, over the paper's ten seeds;
+6. the results, overall and client by client.
 
-Cells 1 to 4 run in seconds and reproduce the paper's split, heterogeneity scores and widths exactly. Cell 5 trains two 50-round federated runs, which takes about half an hour on a laptop GPU. It trains one seed, and GPU training is not bit-for-bit repeatable, so its accuracies move by a few tenths of a point between runs and machines. The paper reports the mean over 10 seeds, so compare the trend.
+Everything takes seconds except training: twenty federated runs of a few minutes each on a GPU (about five minutes each on an Apple-silicon laptop). The paper's experiments ran on an Apple-silicon GPU, and there the runs follow the paper's own runs almost exactly. On other hardware, tiny floating-point differences grow during training, so a single seed can end a few tenths of a point higher or lower, while the ten-seed averages stay close.
 
 To run it locally instead:
 
@@ -40,6 +38,7 @@ jupyter notebook notebooks/HASA_demo.ipynb
 | `hasa/method.py` | Train-only heterogeneity score and budgeted width allocation (Algorithm 1), plus the other allocation policies compared in the paper |
 | `hasa/model.py` | Slimmable one-layer LSTM (embedding 128, hidden 256) |
 | `hasa/train.py` | Federated training with FedAvg, and the selective-aggregation baselines |
+| `hasa/report.py` | Tables and figures for results over several seeds |
 | `notebooks/HASA_demo.ipynb` | The demo |
 | `data/medium_data.csv` | The dataset (see below) |
 
